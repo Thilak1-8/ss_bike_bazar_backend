@@ -29,7 +29,7 @@ db.connect((err) => {
 
 // Middleware
 app.use(cors({
-  origin: "http://localhost:3000",
+  origin: "https://ss-bike-bazar-frontend.vercel.app/"||"http://localhost:3000",
 }));
 app.use(express.json());
 app.use(bodyParser.json());

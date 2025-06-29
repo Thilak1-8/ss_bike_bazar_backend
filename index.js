@@ -1,41 +1,38 @@
 import express from "express";
-import bodyParser from "body-parser";
 import pg from "pg";
 import bcrypt from "bcrypt";
 import cors from "cors";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 
-
 dotenv.config();
 
 const app = express();
-const port = 10000;
+const port = process.env.PORT || 10000;
 
+// PostgreSQL Client Setup
 const db = new pg.Client({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false } // Needed for Render, Heroku, etc.
+  ssl: { rejectUnauthorized: false }, // Required for Render PostgreSQL
 });
-
-
 
 db.connect((err) => {
   if (err) {
     console.error("Database connection error:", err.stack);
     process.exit(1);
   }
-  console.log("Connected to padmasai_db");
+  console.log("✅ Connected to padmasai_db");
 });
 
 // Middleware
 app.use(cors({
-  origin: "https://ss-bike-bazar-frontend.vercel.app/"||"http://localhost:3000",
+  origin: ["https://ss-bike-bazar-frontend.vercel.app", "http://localhost:3000"],
+  credentials: true,
 }));
 app.use(express.json());
-app.use(bodyParser.json());
 
 // JWT Secret
-const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_SECRET = process.env.JWT_SECRET || "default_secret_key";
 
 // Middleware to verify JWT token
 const verifyToken = (req, res, next) => {
@@ -56,36 +53,38 @@ const verifyToken = (req, res, next) => {
   }
 };
 
-// Login endpoint
+// Routes
+
+app.get("/", (req, res) => {
+  res.send("🚀 Backend server is running.");
+});
+
+// Login
 app.post("/api/login", async (req, res) => {
   const { username, password } = req.body;
 
   try {
-    console.log(`Attempting login for username: ${username}`);
     const result = await db.query(
       "SELECT * FROM admins WHERE LOWER(username) = LOWER($1)",
       [username]
     );
 
     if (result.rows.length === 0) {
-      console.log(`User not found: ${username}`);
       return res.status(401).json({ error: "Invalid username or password" });
     }
 
     const user = result.rows[0];
-    console.log(`User found: ${user.username}, stored hash: ${user.password}`);
-
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      console.log(`Password mismatch for ${username}. Provided: ${password}`);
       return res.status(401).json({ error: "Invalid username or password" });
     }
 
-    const token = jwt.sign({ userId: user.id, username: user.username }, JWT_SECRET, {
-      expiresIn: "1d",
-    });
+    const token = jwt.sign(
+      { userId: user.id, username: user.username },
+      JWT_SECRET,
+      { expiresIn: "1d" }
+    );
 
-    console.log(`Login successful for ${username}`);
     res.status(200).json({ message: "Login successful", token });
   } catch (err) {
     console.error("Login error:", err);
@@ -93,13 +92,11 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
-// Verify Token endpoint
+// Token Verification
 app.post("/api/verify-token", (req, res) => {
   const { token } = req.body;
 
-  if (!token) {
-    return res.status(401).json({ error: "No token provided" });
-  }
+  if (!token) return res.status(401).json({ error: "No token provided" });
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
@@ -130,7 +127,7 @@ app.post("/api/bikes", verifyToken, async (req, res) => {
   }
 });
 
-// Update a bike (protected)
+// Update bike (protected)
 app.put("/api/bikes/:id", verifyToken, async (req, res) => {
   const { id } = req.params;
   const { url, name, model, engine, fuel, color, warranty } = req.body;
@@ -181,7 +178,7 @@ app.get("/api/bikes/:id", async (req, res) => {
   }
 });
 
-// Delete bike by ID (protected)
+// Delete bike (protected)
 app.delete("/api/bikes/:id", verifyToken, async (req, res) => {
   const { id } = req.params;
 
@@ -197,6 +194,7 @@ app.delete("/api/bikes/:id", verifyToken, async (req, res) => {
   }
 });
 
+// Submit contact form
 app.post("/api/contact", async (req, res) => {
   const { name, phone, email, query } = req.body;
 
@@ -215,6 +213,7 @@ app.post("/api/contact", async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+
 // Get all contact submissions (protected)
 app.get("/api/contact-submissions", verifyToken, async (req, res) => {
   try {
@@ -226,6 +225,12 @@ app.get("/api/contact-submissions", verifyToken, async (req, res) => {
   }
 });
 
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error("Unhandled error:", err);
+  res.status(500).json({ error: "Internal server error" });
+});
+
 app.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
+  console.log(`🚀 Server running on http://localhost:${port}`);
 });
